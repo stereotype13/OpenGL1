@@ -17,6 +17,16 @@ struct Vertex {
 
 };
 
+static GLfloat x_mouse = 0.0f;
+static GLfloat y_mouse = 0.0f;
+
+static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
+{
+	x_mouse = (xpos - 640 / 2) / (GLfloat(640 / 2));
+	y_mouse = (480 / 2 - ypos) / (GLfloat(480 / 2));
+	std::cout << "xpos: " << (xpos - 640 / 2) /( GLfloat( 640 / 2 ) ) << ", ypos: " << (480 / 2 - ypos) / (GLfloat( 480 / 2) ) << std::endl;
+};
+
 
 int main()
 {
@@ -34,6 +44,8 @@ int main()
 
 	glfwMakeContextCurrent(window);
 
+	glfwSetCursorPosCallback(window, cursor_position_callback);
+
 	//make it so we're not limited to 60 frames per second
 	glfwSwapInterval(0);
 
@@ -49,14 +61,14 @@ int main()
 	fprintf(stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
 
-	GLuint testVAO;
-	glGenVertexArrays(1, &testVAO);
+	GLuint VAO;
+	glGenVertexArrays(1, &VAO);
 
-	GLuint testVBO;
-	glGenVertexArrays(1, &testVBO);
+	GLuint VBO;
+	glGenVertexArrays(1, &VBO);
 
-	glBindBuffer(GL_ARRAY_BUFFER, testVBO);
-	glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(Vertex), NULL, GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, 8 * sizeof(Vertex), NULL, GL_STATIC_DRAW);
 	Vertex* v = (Vertex*)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 
 	//0
@@ -102,7 +114,53 @@ int main()
 	v->color[1] = 1.0f;
 	v->color[2] = 0.0f;
 
-	//glUnmapBuffer(testVBO);
+	++v;
+	//New rectangle
+
+	//0
+
+	v->position[0] = 0.4f;
+	v->position[1] = -0.75f;
+	v->position[2] = 0.5f;
+
+	v->color[0] = 0.25f;
+	v->color[1] = 0.25f;
+	v->color[2] = 0.5f;
+
+	++v;
+
+	//1
+	v->position[0] = 0.85f;
+	v->position[1] = -0.75f;
+	v->position[2] = 0.5f;
+
+	v->color[0] = 0.25f;
+	v->color[1] = 0.25f;
+	v->color[2] = 0.5f;
+
+	++v;
+
+	//2 
+	v->position[0] = 0.85f;
+	v->position[1] = 0.75f;
+	v->position[2] = 0.5f;
+
+	v->color[0] = 0.75f;
+	v->color[1] = 0.75f;
+	v->color[2] = 0.75f;
+
+	++v;
+
+	//3
+	v->position[0] = 0.4f;
+	v->position[1] = 0.75f;
+	v->position[2] = 0.5f;
+
+	v->color[0] = 0.75f;
+	v->color[1] = 0.75f;
+	v->color[2] = 0.75f;
+
+	//glUnmapBuffer(VBO);
 
 	// Position attribute
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)0);
@@ -128,7 +186,9 @@ int main()
 
 	GLuint indices[] = {  // Note that we start from 0!
 		0, 1, 3, // First Triangle
-		1, 2, 3  // Second Triangle
+		1, 2, 3,  // Second Triangle
+		4, 5, 7,
+		5, 6, 7
 	};
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
@@ -157,12 +217,17 @@ int main()
 	const char* vertexShaderSource = "#version 330 core\n \
 		layout (location = 0) in vec3 position;\
 		layout (location = 1) in vec3 color; \
+		uniform vec3 lightPositionIn; \
 		out vec3 ourColor;\
 		out vec2 TexCoord;\
+		out vec3 lightPosition;\
+		out vec3 fragmentPosition; \
 		void main() \
 		{ \
 			gl_Position = vec4(position, 1.0); \
-			ourColor = color;\
+			ourColor = color; \
+			lightPosition = lightPositionIn; \
+			fragmentPosition = position; \
 		}";
 
 	GLuint vertexShader;
@@ -183,11 +248,17 @@ int main()
 
 	const char* fragmentShaderSource = "#version 330 core\n \
 		in vec3 ourColor;\
+		in vec3 lightPosition; \
+		in vec3 fragmentPosition; \
 		out vec4 color; \
 		uniform sampler2D ourTexture;\
 		void main() \
 		{ \
-			color =  vec4(ourColor, 1.0f); \
+			vec3 norm = vec3(0.0f, 0.0f, -1.0f); \
+			vec3 lightDir = normalize(lightPosition - fragmentPosition); \
+			float diff = max(dot(norm, lightDir), 0.0); \
+			vec3 diffuse = diff * vec3(1.0f, 1.0f, 1.0f); \
+			color =  vec4(diffuse * ourColor, 1.0f); \
 		}";
 
 	
@@ -230,10 +301,11 @@ int main()
 	long double sumTime = 0.0f;
 	int frames = 0;
 	glUseProgram(shaderProgram);
+	glEnable(GL_DEPTH_TEST);
 	while (!glfwWindowShouldClose(window)) {
 
 		if (sumTime > 1.0e6f) {
-			printf("FPS: %i\n", frames);
+			//printf("FPS: %i\n", frames);
 			sumTime = 0.0f;
 			frames = 0;
 		}
@@ -242,15 +314,22 @@ int main()
 		start_time = std::chrono::high_resolution_clock::now();
 		++frames;
 		
-		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		GLint lightPositionUniformLocation = glGetUniformLocation(shaderProgram, "lightPositionIn");
+		GLfloat lightPos[3]{ x_mouse, y_mouse, -0.1f };
+
+		glUniform3fv(lightPositionUniformLocation, 1, (GLfloat*)lightPos);
+		
+		//glBindVertexArray(VAO);
+		glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
 		glfwSwapBuffers(window);
 
 		glfwPollEvents();
 	}
 
-	glDeleteVertexArrays(1, &testVAO);
-	glDeleteBuffers(1, &testVBO);
+	glDeleteVertexArrays(1, &VAO);
+	glDeleteBuffers(1, &VBO);
 	glDeleteBuffers(1, &EBO);
 
 	glDeleteShader(vertexShader);
